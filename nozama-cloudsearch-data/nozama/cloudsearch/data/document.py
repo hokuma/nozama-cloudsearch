@@ -125,6 +125,8 @@ def search(query={}):
 
     qstring = query.get('q', '')
     log.debug("searching query '{0}'".format(query))
+    response_format = query.get('format', '')
+    log.debug("response format '{0}'".format(response_format))
 
     try:
         if qstring:
@@ -154,6 +156,10 @@ def search(query={}):
     for i in results['hits']['hits']:
         query = dict(_id=i['_id'])
         fields = conn.documents.find_one(query)['fields']
+        if response_format == u'sdk':
+            for key, value in fields.items():
+                if not isinstance(value, list):
+                    fields[key] = [value]
         hit.append({"id": i['_id'], "fields": fields})
 
     rc = {
