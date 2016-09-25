@@ -61,7 +61,7 @@ class DocSchema(formencode.Schema):
 
     #fields = FieldsSchema(not_empty=True)
 
-    version = validators.String(not_empty=True, strip=True)
+    #version = validators.String(not_empty=True, strip=True)
 
     type = validators.OneOf(
         ["add", "delete"], not_empty=True, strip=True,
@@ -125,13 +125,15 @@ def search(query={}):
 
     qstring = query.get('q', '')
     log.debug("searching query '{0}'".format(query))
+    response_format = query.get('format', '')
+    log.debug("response format '{0}'".format(response_format))
 
     try:
         if qstring:
             query = {
                 "query": {
                     "query_string": {
-                        "query": "{0}*".format(qstring)
+                        "query": u"{0}*".format(qstring)
                     }
                 }
             }
@@ -149,13 +151,24 @@ def search(query={}):
             took=0,
         )
 
+    hit = []
+    conn = db().conn()
+    for i in results['hits']['hits']:
+        query = dict(_id=i['_id'])
+        fields = conn.documents.find_one(query)['fields']
+        if response_format == u'sdk':
+            for key, value in fields.items():
+                if not isinstance(value, list):
+                    fields[key] = [value]
+        hit.append({"id": i['_id'], "fields": fields})
+
     rc = {
         "rank": "-text_relevance",
-        "match-expr": "(label '{0}')".format(qstring),
+        "match-expr": u"(label '{0}')".format(qstring),
         "hits": {
             "found": results['hits']['total'],
             "start": 0,
-            "hit": [{"id": i['_id']} for i in results['hits']['hits']]
+            "hit": hit
         },
         "info": {
             "rid": os.urandom(40).encode('hex'),
@@ -218,8 +231,8 @@ def load(docs_to_load):
 
     if to_load:
         log.debug("bulk loading: '{0}' document(s)".format(len(to_load)))
-        conn.documents.insert(to_load)
         for doc in to_load:
+            conn.documents.update({'_id': doc['id']}, doc, True)
             add_to_elasticsearch(doc)
 
     if to_remove:
